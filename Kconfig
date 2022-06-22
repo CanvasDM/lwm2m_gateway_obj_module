@@ -1,0 +1,57 @@
+#
+# Copyright (c) 2022 Laird Connectivity LLC
+#
+# SPDX-License-Identifier: LicenseRef-LairdConnectivity-Clause
+#
+menuconfig LCZ_LWM2M_GATEWAY_OBJ
+	bool "LCZ LwM2M Gateway Object"
+	depends on LCZ_LWM2M_CLIENT
+	depends on LCZ_LWM2M_GATEWAY_OBJ_SUPPORT
+
+if LCZ_LWM2M_GATEWAY_OBJ
+
+module=LCZ_LWM2M_GATEWAY_OBJ
+module-str=LCZ_LWM2M_GATEWAY_OBJ
+source "subsys/logging/Kconfig.template.log_config"
+
+config LCZ_LWM2M_GATEWAY_OBJ_INIT_PRIORITY
+	int "LwM2M gateway object application init priority"
+	range 0 99
+	default APPLICATION_INIT_PRIORITY
+
+config LCZ_LWM2M_GATEWAY_OBJ_DEFAULT_LIFETIME_SECONDS
+	int "Gateway object default inactivity timeout"
+	default 300
+
+config LCZ_LWM2M_GATEWAY_OBJ_BLOCK_LIST_SIZE
+	int "Gateway block list length"
+	default 16
+	help
+	  This is the size of the block list used by the gateway object. This is the
+	  maximum number of end nodes that can be ignored by the gateway.
+
+config LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST
+	bool "Gateway allow list"
+	depends on LCZ_PARAM_FILE
+	help
+	  Adds support for reading an allow list from a file in the filesystem that
+	  specifies the addresses of the end nodes that are allowed to be reported
+	  through the gateway.
+
+if LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST
+
+config LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_FILE
+	string "Gateway allow list file path"
+	default "/lfs1/gw_allow.txt"
+
+config LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_SIZE
+	int "Gateway allow list length"
+	default 16
+	help
+	  This is the size of the allow list used by the gateway object. This is the
+	  maximum number of end nodes that can be explicitly allowed to be reported
+	  through the gateway
+
+endif # LZC_LWM2M_GATEWAY_OBJ_ALLOW_LIST
+
+endif # LCZ_LWM2M_GATEWAY_OBJ
