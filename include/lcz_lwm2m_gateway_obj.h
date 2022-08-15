@@ -141,6 +141,17 @@ void lcz_lwm2m_gw_obj_tick(int idx);
 int lcz_lwm2m_gw_obj_set_endpoint_name(int idx, char *name, int name_len);
 
 /**
+ * @brief Read device's endpoint name from the database
+ *
+ * @param[in] idx Gateway object database index for the device
+ * @param[in] name Buffer to write endpoint name into
+ * @param[in] name_len Length of endpoint name string
+ *
+ * @returns <0 or error or 0 if name was copied.
+ */
+int lcz_lwm2m_gw_obj_get_endpoint_name(int idx, char *name, int name_len);
+
+/**
  * @brief Set/update a device's object list
  *
  * The object list is specified as a CoreLnk string. The string will be

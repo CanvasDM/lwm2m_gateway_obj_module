@@ -359,6 +359,30 @@ int lcz_lwm2m_gw_obj_set_endpoint_name(int idx, char *name, int name_len)
 	return retval;
 }
 
+int lcz_lwm2m_gw_obj_get_endpoint_name(int idx, char *name, int name_len)
+{
+	char path[LWM2M_MAX_PATH_STR_LEN];
+	int retval = 0;
+
+	if (idx < 0) {
+		retval = -EINVAL;
+	} else if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
+		   ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+		retval = -ENOENT;
+	} else if ((devices[idx].flags & DEV_FLAG_INST_CREATED) != 0) {
+		snprintf(path, sizeof(path),
+			 STRINGIFY(LWM2M_OBJECT_GATEWAY_ID) "/%u/" STRINGIFY(
+				 LWM2M_GATEWAY_DEVICE_RID),
+			 devices[idx].instance);
+
+		retval = lwm2m_engine_get_string(path, name, name_len);
+	} else {
+		retval = -EEXIST;
+	}
+
+	return retval;
+}
+
 int lcz_lwm2m_gw_obj_set_object_list(int idx, char *obj_list, int obj_list_len)
 {
 	char path[LWM2M_MAX_PATH_STR_LEN];
