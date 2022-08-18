@@ -77,6 +77,13 @@ struct gateway_obj_allow_block_t {
 #define BLE_ADDRESS_TYPE_LEN (2 * sizeof(allow_list[0].addr.type))
 #define BLE_ADDRESS_VAL_LEN (2 * sizeof(allow_list[0].addr.a.val))
 
+/* Telemetry data isn't currently supported using object 25.
+ * [Sensor] Object instances are created on the gateway.
+ * Allow 4 of each sensor type per BT6.
+ * Reserve locations 0 to 3 for gateway or other [sensor] instances.
+ */
+#define LEGACY_INSTANCE(x) ((4 * (x)) + CONFIG_LCZ_LWM2M_GATEWAY_OBJ_LEGACY_INST_OFFSET)
+
 /**************************************************************************************************/
 /* Local Data Definitions                                                                         */
 /**************************************************************************************************/
@@ -184,9 +191,10 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
 	/* Check the allow list */
-	if (retval == 0) {
+	if (retval >= 0) {
 		for (i = 0; i < allow_list_len; i++) {
 			if (bt_addr_le_cmp(addr, &(allow_list[i].addr)) == 0) {
+				retval = i;
 				instance = allow_list[i].d.instance;
 				break;
 			}
@@ -199,7 +207,7 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 #endif
 
 	/* Create the device if we're allowed to */
-	if (retval == 0) {
+	if (retval >= 0) {
 		for (i = 0; i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
 			if ((devices[i].flags & DEV_FLAG_IN_USE) == 0) {
 				break;
@@ -209,9 +217,10 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 		if (i >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) {
 			retval = -ENOMEM;
 		} else {
-			/* Set instance value to array index if wasn't set above */
+			/* If it wasn't set above, create instance value based on array index */
 			if (instance < 0) {
-				instance = i;
+				retval = i;
+				instance = LEGACY_INSTANCE(i);
 			}
 
 			devices[i].flags |= DEV_FLAG_IN_USE;
