@@ -58,4 +58,21 @@ config LCZ_LWM2M_GATEWAY_OBJ_LEGACY_INST_OFFSET
 	int
 	default 4
 
+config LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST
+	bool "Gateway static instance list based on BLE address"
+	depends on FILE_SYSTEM_UTILITIES
+	help
+	  Adds support for generating instances based on Bluetooth addresses.
+	  Instances are assigned in the order that addresses seen.
+	  Address are saved to a file so that instances are preserved between resets.
+	  Only used if allow list length is 0.
+
+if LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST
+
+config LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST_FILE
+	string "Gateway allow list file path"
+	default "/lfs1/gw_static_inst"
+
+endif # LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST
+
 endif # LCZ_LWM2M_GATEWAY_OBJ

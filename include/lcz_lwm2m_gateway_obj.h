@@ -63,6 +63,16 @@ int lcz_lwm2m_gw_obj_lookup_path(char *prefix);
  */
 int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr);
 
+
+/**
+ * @brief Determine if object instance has been created for item in database.
+ *
+ * @param idx Gateway object database index
+ * @return true if obj instance has been created
+ * @return false if obj instance has not been created or index is invalid
+ */
+bool lcz_lwm2m_gw_obj_inst_created(int idx);
+
 /**
  * @brief Get the BLE address of a device
  *
@@ -128,6 +138,8 @@ void lcz_lwm2m_gw_obj_tick(int idx);
 
 /**
  * @brief Set/update a device's endpoint name
+ *
+ * If object instance doesn't exist it will be created.
  *
  * Name will be copied into the database, so the passed pointer does
  * not need to persist.

@@ -26,6 +26,10 @@ LOG_MODULE_REGISTER(lcz_lwm2m_gateway_obj, CONFIG_LCZ_LWM2M_GATEWAY_OBJ_LOG_LEVE
 #include <lcz_param_file.h>
 #endif
 
+#if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST)
+#include "file_system_utilities.h"
+#endif
+
 #include "lcz_lwm2m_gateway_obj.h"
 
 /**************************************************************************************************/
@@ -105,10 +109,12 @@ static lcz_lwm2m_device_deleted_cb_t telem_delete_cb;
 /**************************************************************************************************/
 static int lcz_lwm2m_gateway_obj_init(const struct device *device);
 
+static bool invalid_index(int idx);
 static void register_instance(int idx);
 static void delete_instance(int idx, bool delete_obj);
 static int add_blocklist(int idx, uint16_t duration);
 static int instance_deleted_cb(uint16_t obj_inst_id);
+static int get_instance(const bt_addr_le_t *addr, int idx);
 
 static void manage_lists(uint32_t tag);
 
@@ -194,7 +200,6 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 	if (retval >= 0) {
 		for (i = 0; i < allow_list_len; i++) {
 			if (bt_addr_le_cmp(addr, &(allow_list[i].addr)) == 0) {
-				retval = i;
 				instance = allow_list[i].d.instance;
 				break;
 			}
@@ -217,12 +222,12 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 		if (i >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) {
 			retval = -ENOMEM;
 		} else {
-			/* If it wasn't set above, create instance value based on array index */
+			/* If it wasn't set above, get instance value. */
 			if (instance < 0) {
-				retval = i;
-				instance = LEGACY_INSTANCE(i);
+				instance = get_instance(addr, i);
 			}
 
+			retval = i;
 			devices[i].flags |= DEV_FLAG_IN_USE;
 			memcpy(&(devices[i].addr), addr, sizeof(devices[0].addr));
 			devices[i].instance = instance;
@@ -243,8 +248,7 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 
 bt_addr_le_t *lcz_lwm2m_gw_obj_get_address(int idx)
 {
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		return NULL;
 	} else {
 		return &(devices[idx].addr);
@@ -255,8 +259,7 @@ char *lcz_lwm2m_gw_obj_get_addr_string(int idx)
 {
 	static char addr_str[BT_ADDR_LE_STR_LEN];
 
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		return NULL;
 	} else {
 		bt_addr_le_to_str(&(devices[idx].addr), addr_str, sizeof(addr_str));
@@ -266,8 +269,7 @@ char *lcz_lwm2m_gw_obj_get_addr_string(int idx)
 
 int lcz_lwm2m_gw_obj_get_instance(int idx)
 {
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		return -ENOENT;
 	} else {
 		return devices[idx].instance;
@@ -282,8 +284,7 @@ char *lcz_lwm2m_gw_obj_get_prefix(int idx)
 	uint8_t prefix_flags;
 	int r;
 
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		return NULL;
 	} else {
 		/* Set the prefix string */
@@ -337,8 +338,7 @@ int lcz_lwm2m_gw_obj_set_endpoint_name(int idx, char *name, int name_len)
 	char endpoint[CONFIG_LCZ_LWM2M_GATEWAY_DEVICE_ID_MAX_STR_SIZE];
 	int retval = 0;
 
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		retval = -ENOENT;
 	} else {
 		if ((devices[idx].flags & DEV_FLAG_INST_CREATED) == 0) {
@@ -368,15 +368,21 @@ int lcz_lwm2m_gw_obj_set_endpoint_name(int idx, char *name, int name_len)
 	return retval;
 }
 
+bool lcz_lwm2m_gw_obj_inst_created(int idx)
+{
+	if (invalid_index(idx)) {
+		return false;
+	} else {
+		return ((devices[idx].flags & DEV_FLAG_INST_CREATED) != 0);
+	}
+}
+
 int lcz_lwm2m_gw_obj_get_endpoint_name(int idx, char *name, int name_len)
 {
 	char path[LWM2M_MAX_PATH_STR_LEN];
 	int retval = 0;
 
-	if (idx < 0) {
-		retval = -EINVAL;
-	} else if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-		   ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		retval = -ENOENT;
 	} else if ((devices[idx].flags & DEV_FLAG_INST_CREATED) != 0) {
 		snprintf(path, sizeof(path),
@@ -398,8 +404,7 @@ int lcz_lwm2m_gw_obj_set_object_list(int idx, char *obj_list, int obj_list_len)
 	char objlist[CONFIG_LCZ_LWM2M_GATEWAY_IOT_DEVICE_OBJECTS_MAX_STR_SIZE];
 	int retval = 0;
 
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		retval = -ENOENT;
 	} else {
 		if ((devices[idx].flags & DEV_FLAG_INST_CREATED) == 0) {
@@ -432,8 +437,7 @@ int lcz_lwm2m_gw_obj_set_object_list(int idx, char *obj_list, int obj_list_len)
 
 int lcz_lwm2m_gw_obj_set_lifetime(int idx, uint16_t lifetime)
 {
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		return -ENOENT;
 	} else {
 		devices[idx].lifetime = lifetime;
@@ -449,8 +453,7 @@ int lcz_lwm2m_gw_obj_set_lifetime(int idx, uint16_t lifetime)
 
 int lcz_lwm2m_gw_obj_set_dm_data(int idx, void *dm_ptr)
 {
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		return -ENOENT;
 	} else {
 		devices[idx].dm_data_ptr = dm_ptr;
@@ -460,8 +463,7 @@ int lcz_lwm2m_gw_obj_set_dm_data(int idx, void *dm_ptr)
 
 void *lcz_lwm2m_gw_obj_get_dm_data(int idx)
 {
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		return NULL;
 	} else {
 		return devices[idx].dm_data_ptr;
@@ -470,8 +472,7 @@ void *lcz_lwm2m_gw_obj_get_dm_data(int idx)
 
 int lcz_lwm2m_gw_obj_set_telem_data(int idx, void *telem_ptr)
 {
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		return -ENOENT;
 	} else {
 		devices[idx].telem_data_ptr = telem_ptr;
@@ -481,8 +482,7 @@ int lcz_lwm2m_gw_obj_set_telem_data(int idx, void *telem_ptr)
 
 void *lcz_lwm2m_gw_obj_get_telem_data(int idx)
 {
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		return NULL;
 	} else {
 		return devices[idx].telem_data_ptr;
@@ -493,8 +493,7 @@ int lcz_lwm2m_gw_obj_add_blocklist(int idx, uint16_t duration)
 {
 	int retval = -ENOMEM;
 
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
-	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+	if (invalid_index(idx)) {
 		retval = -ENOENT;
 	} else {
 		/* Add the device to the blocklist */
@@ -520,6 +519,16 @@ void lcz_lwm2m_gw_obj_set_telem_delete_cb(lcz_lwm2m_device_deleted_cb_t telem_cb
 /**************************************************************************************************/
 /* Local Function Definitions                                                                     */
 /**************************************************************************************************/
+static bool invalid_index(int idx)
+{
+	if ((idx < 0) || (idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
+	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
 static void register_instance(int idx)
 {
 	char path[LWM2M_MAX_PATH_STR_LEN];
@@ -713,4 +722,39 @@ static int lcz_lwm2m_gateway_obj_init(const struct device *device)
 #endif /* LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST */
 
 	return 0;
+}
+
+/* Create instance value based on array index or
+ * create instance value based on Bluetooth address.
+ */
+static int get_instance(const bt_addr_le_t *addr, int idx)
+{
+#if !defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST)
+	return LEGACY_INSTANCE(idx);
+#else
+	const char *file_name = CONFIG_LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST_FILE;
+	uint32_t i = 0;
+	uint32_t offset = 0;
+	ssize_t status;
+	bt_addr_le_t inst_addr = { 0 };
+	const size_t size = sizeof(bt_addr_le_t);
+
+	do {
+		status = fsu_read_abs_block(file_name, offset, &inst_addr, size);
+		if (bt_addr_le_cmp(addr, &inst_addr) == 0) {
+			LOG_WRN("Matched Bluetooth Address index: %u", i);
+			break;
+		}
+		i += 1;
+		offset += size;
+	} while (status == size);
+
+	/* If address wasn't found, then add it to the list */
+	if (status <= 0) {
+		status = fsu_append_abs(file_name, (void *)addr, size);
+		LOG_DBG("Append static instance list: %d", status);
+	}
+
+	return LEGACY_INSTANCE(i);
+#endif
 }
