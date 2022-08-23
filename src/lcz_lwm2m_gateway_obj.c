@@ -588,6 +588,7 @@ static void delete_instance(int idx, bool delete_obj)
 static int add_blocklist(int idx, uint16_t duration)
 {
 	int64_t now = k_uptime_get();
+	char addr_str[BT_ADDR_LE_STR_LEN];
 	int retval = -ENOMEM;
 	int i;
 
@@ -601,6 +602,9 @@ static int add_blocklist(int idx, uint16_t duration)
 			} else {
 				block_list[i].d.expires = now + (duration * MSEC_PER_SEC);
 			}
+			bt_addr_le_to_str(&(block_list[i].addr), addr_str, sizeof(addr_str));
+			LOG_INF("Adding %s to blocklist with expiration %lld", addr_str,
+				block_list[i].d.expires);
 			retval = 0;
 			break;
 		}
