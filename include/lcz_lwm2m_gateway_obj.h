@@ -241,6 +241,29 @@ int lcz_lwm2m_gw_obj_set_telem_data(int idx, void *telem_ptr);
 void *lcz_lwm2m_gw_obj_get_telem_data(int idx);
 
 /**
+ * @brief Set/update a device's private security data
+ *
+ * The gateway object database holds a pointer to private security
+ * data associated with the device. This function can be used to set
+ * or update this pointer.
+ *
+ * @param[in] idx Gateway object database index for the device
+ * @param[in] security_ptr New security private data pointer
+ *
+ * @returns <0 on error or 0 if database was updated.
+ */
+int lcz_lwm2m_gw_obj_set_security_data(int idx, void *security_ptr);
+
+/**
+ * @brief Get a device's private security data
+ *
+ * @param[in] idx Gateway object database index for the device
+ *
+ * @returns The pointer to the private security data or NULL on error
+ */
+void *lcz_lwm2m_gw_obj_get_security_data(int idx);
+
+/**
  * @brief Add device to blocklist
  *
  * Add the given device to the blocklist. The duration of the blocklisting is given by the
@@ -283,6 +306,19 @@ void lcz_lwm2m_gw_obj_set_dm_delete_cb(lcz_lwm2m_device_deleted_cb_t dm_cb);
  * @param[in] dm_cb Pointer to the new telemetry device delete callback
  */
 void lcz_lwm2m_gw_obj_set_telem_delete_cb(lcz_lwm2m_device_deleted_cb_t telem_cb);
+
+/**
+ * @brief Set security device delete callback
+ *
+ * This function allows the security layer to set a callback to be called when
+ * a device from the gateway object database is deleted. Devices are deleted
+ * for two reasons: the device has not been seen within its lifetime duration
+ * or the server has indicated that the device should not be linked to this
+ * gateway.
+ *
+ * @param[in] dm_cb Pointer to the new security device delete callback
+ */
+void lcz_lwm2m_gw_obj_set_security_delete_cb(lcz_lwm2m_device_deleted_cb_t security_cb);
 
 #ifdef __cplusplus
 }

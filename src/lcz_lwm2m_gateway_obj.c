@@ -58,6 +58,7 @@ struct gateway_obj_device_t {
 	/* Pointers to private application data */
 	void *dm_data_ptr;
 	void *telem_data_ptr;
+	void *security_data_ptr;
 };
 
 /* Structure used to hold allow and block lists */
@@ -103,6 +104,7 @@ static int allow_list_len = 0;
 /* User callbacks */
 static lcz_lwm2m_device_deleted_cb_t dm_delete_cb;
 static lcz_lwm2m_device_deleted_cb_t telem_delete_cb;
+static lcz_lwm2m_device_deleted_cb_t security_delete_cb;
 
 /**************************************************************************************************/
 /* Local Function Prototypes                                                                      */
@@ -489,6 +491,27 @@ void *lcz_lwm2m_gw_obj_get_telem_data(int idx)
 	}
 }
 
+int lcz_lwm2m_gw_obj_set_security_data(int idx, void *security_ptr)
+{
+	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
+	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+		return -ENOENT;
+	} else {
+		devices[idx].security_data_ptr = security_ptr;
+		return 0;
+	}
+}
+
+void *lcz_lwm2m_gw_obj_get_security_data(int idx)
+{
+	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
+	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
+		return NULL;
+	} else {
+		return devices[idx].security_data_ptr;
+	}
+}
+
 int lcz_lwm2m_gw_obj_add_blocklist(int idx, uint16_t duration)
 {
 	int retval = -ENOMEM;
@@ -514,6 +537,11 @@ void lcz_lwm2m_gw_obj_set_dm_delete_cb(lcz_lwm2m_device_deleted_cb_t dm_cb)
 void lcz_lwm2m_gw_obj_set_telem_delete_cb(lcz_lwm2m_device_deleted_cb_t telem_cb)
 {
 	telem_delete_cb = telem_cb;
+}
+
+void lcz_lwm2m_gw_obj_set_security_delete_cb(lcz_lwm2m_device_deleted_cb_t security_cb)
+{
+	security_delete_cb = security_cb;
 }
 
 /**************************************************************************************************/
@@ -571,6 +599,9 @@ static void delete_instance(int idx, bool delete_obj)
 	}
 	if (telem_delete_cb) {
 		telem_delete_cb(idx, devices[idx].telem_data_ptr);
+	}
+	if (security_delete_cb) {
+		security_delete_cb(idx, devices[idx].security_data_ptr);
 	}
 
 	/* Remove it from our database */
