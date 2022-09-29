@@ -242,6 +242,7 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 			}
 			devices[i].dm_data_ptr = NULL;
 			devices[i].telem_data_ptr = NULL;
+			devices[i].security_data_ptr = NULL;
 		}
 	}
 
