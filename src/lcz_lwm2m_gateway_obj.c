@@ -421,7 +421,8 @@ int lcz_lwm2m_gw_obj_set_object_list(int idx, char *obj_list, int obj_list_len)
 
 			/* Limit the size of the object list string to what fits in the object */
 			if (obj_list_len > (sizeof(objlist) - 1)) {
-				obj_list_len = sizeof(objlist) - 1;
+				LOG_ERR("Object list length %d too long", obj_list_len);
+				obj_list_len = 0;
 			}
 
 			/* Copy and nul-terminate the string */
