@@ -14,9 +14,9 @@
 /**************************************************************************************************/
 #include <stddef.h>
 #include <stdint.h>
-#include <zephyr.h>
+#include <zephyr/zephyr.h>
 #include <zephyr/types.h>
-#include <bluetooth/addr.h>
+#include <zephyr/bluetooth/addr.h>
 
 #ifdef __cplusplus
 extern "C" {

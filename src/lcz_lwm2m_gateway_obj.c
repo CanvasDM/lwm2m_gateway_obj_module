@@ -9,25 +9,25 @@
 /**************************************************************************************************/
 /* Includes                                                                                       */
 /**************************************************************************************************/
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(lcz_lwm2m_gateway_obj, CONFIG_LCZ_LWM2M_GATEWAY_OBJ_LOG_LEVEL);
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <zephyr.h>
-#include <init.h>
-#include <bluetooth/addr.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/init.h>
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/net/lwm2m.h>
 #include <lwm2m_obj_gateway.h>
-#include <lcz_lwm2m.h>
 
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
 #include <lcz_param_file.h>
 #endif
 
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST)
-#include "file_system_utilities.h"
+#include <file_system_utilities.h>
 #endif
 
 #include "lcz_lwm2m_gateway_obj.h"
@@ -94,7 +94,7 @@ struct gateway_obj_allow_block_t {
 /**************************************************************************************************/
 
 /* Device lists */
-static struct gateway_obj_device_t devices[CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES];
+static struct gateway_obj_device_t devices[CONFIG_LWM2M_GATEWAY_MAX_INSTANCES];
 static struct gateway_obj_allow_block_t block_list[CONFIG_LCZ_LWM2M_GATEWAY_OBJ_BLOCK_LIST_SIZE];
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
 static struct gateway_obj_allow_block_t allow_list[CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_SIZE];
@@ -128,7 +128,7 @@ int lcz_lwm2m_gw_obj_lookup_ble(const bt_addr_le_t *addr)
 	int i;
 
 	/* Check our device list for the device */
-	for (i = 0; i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
+	for (i = 0; i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
 		if (((devices[i].flags & DEV_FLAG_IN_USE) != 0) &&
 		    bt_addr_le_cmp(addr, &(devices[i].addr)) == 0) {
 			break;
@@ -136,7 +136,7 @@ int lcz_lwm2m_gw_obj_lookup_ble(const bt_addr_le_t *addr)
 	}
 
 	/* If we found the device we were looking for, return it */
-	if (i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) {
+	if (i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES) {
 		return i;
 	} else {
 		return -ENOENT;
@@ -153,15 +153,15 @@ int lcz_lwm2m_gw_obj_lookup_path(char *prefix)
 	int r;
 
 	/* Check our device list for the device */
-	for (i = 0; i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
+	for (i = 0; i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
 		if ((devices[i].flags & DEV_FLAG_IN_USE) != 0) {
 			/* Get the prefix string */
 			snprintf(path, sizeof(path),
 				 STRINGIFY(LWM2M_OBJECT_GATEWAY_ID) "/%u/" STRINGIFY(
 					 LWM2M_GATEWAY_PREFIX_RID),
 				 devices[i].instance);
-			r = lwm2m_engine_get_res_data(path, (void **)&prefix_str, &prefix_len,
-						      &prefix_flags);
+			r = lwm2m_engine_get_res_buf(path, (void **)&prefix_str, NULL, &prefix_len,
+						     &prefix_flags);
 
 			/* Check the prefix against the path string */
 			if (r == 0 && strcmp(prefix_str, prefix) == 0) {
@@ -171,7 +171,7 @@ int lcz_lwm2m_gw_obj_lookup_path(char *prefix)
 	}
 
 	/* If we found the device we were looking for, return it */
-	if (i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) {
+	if (i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES) {
 		return i;
 	} else {
 		return -ENOENT;
@@ -215,13 +215,13 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 
 	/* Create the device if we're allowed to */
 	if (retval >= 0) {
-		for (i = 0; i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
+		for (i = 0; i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
 			if ((devices[i].flags & DEV_FLAG_IN_USE) == 0) {
 				break;
 			}
 		}
 
-		if (i >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) {
+		if (i >= CONFIG_LWM2M_GATEWAY_MAX_INSTANCES) {
 			retval = -ENOMEM;
 		} else {
 			/* If it wasn't set above, get instance value. */
@@ -295,8 +295,8 @@ char *lcz_lwm2m_gw_obj_get_prefix(int idx)
 			 STRINGIFY(LWM2M_OBJECT_GATEWAY_ID) "/%u/" STRINGIFY(
 				 LWM2M_GATEWAY_PREFIX_RID),
 			 devices[idx].instance);
-		r = lwm2m_engine_get_res_data(path, (void **)&prefix_str, &prefix_len,
-					      &prefix_flags);
+		r = lwm2m_engine_get_res_buf(path, (void **)&prefix_str, NULL, &prefix_len,
+					     &prefix_flags);
 		if (r != 0) {
 			prefix_str = NULL;
 		}
@@ -310,7 +310,7 @@ int lcz_lwm2m_gw_obj_foreach(lcz_lwm2m_device_foreach_cb_t cb, void *priv)
 	int n = 0;
 	int i;
 
-	for (i = 0; i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
+	for (i = 0; i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
 		if ((devices[i].flags & DEV_FLAG_IN_USE) != 0) {
 			if (cb != NULL) {
 				cb(i, devices[i].dm_data_ptr, devices[i].telem_data_ptr, priv);
@@ -324,7 +324,7 @@ int lcz_lwm2m_gw_obj_foreach(lcz_lwm2m_device_foreach_cb_t cb, void *priv)
 
 void lcz_lwm2m_gw_obj_tick(int idx)
 {
-	if ((idx < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) &&
+	if ((idx < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES) &&
 	    ((devices[idx].flags & DEV_FLAG_IN_USE) != 0)) {
 		if (devices[idx].lifetime != 0) {
 			devices[idx].expires =
@@ -338,7 +338,7 @@ void lcz_lwm2m_gw_obj_tick(int idx)
 int lcz_lwm2m_gw_obj_set_endpoint_name(int idx, char *name, int name_len)
 {
 	char path[LWM2M_MAX_PATH_STR_LEN];
-	char endpoint[CONFIG_LCZ_LWM2M_GATEWAY_DEVICE_ID_MAX_STR_SIZE];
+	char endpoint[CONFIG_LWM2M_GATEWAY_DEVICE_ID_MAX_STR_SIZE];
 	int retval = 0;
 
 	if (invalid_index(idx)) {
@@ -404,7 +404,7 @@ int lcz_lwm2m_gw_obj_get_endpoint_name(int idx, char *name, int name_len)
 int lcz_lwm2m_gw_obj_set_object_list(int idx, char *obj_list, int obj_list_len)
 {
 	char path[LWM2M_MAX_PATH_STR_LEN];
-	char objlist[CONFIG_LCZ_LWM2M_GATEWAY_IOT_DEVICE_OBJECTS_MAX_STR_SIZE];
+	char objlist[CONFIG_LWM2M_GATEWAY_IOT_DEVICE_OBJECTS_MAX_STR_SIZE];
 	int retval = 0;
 
 	if (invalid_index(idx)) {
@@ -495,7 +495,7 @@ void *lcz_lwm2m_gw_obj_get_telem_data(int idx)
 
 int lcz_lwm2m_gw_obj_set_security_data(int idx, void *security_ptr)
 {
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
+	if ((idx >= CONFIG_LWM2M_GATEWAY_MAX_INSTANCES) ||
 	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
 		return -ENOENT;
 	} else {
@@ -506,7 +506,7 @@ int lcz_lwm2m_gw_obj_set_security_data(int idx, void *security_ptr)
 
 void *lcz_lwm2m_gw_obj_get_security_data(int idx)
 {
-	if ((idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
+	if ((idx >= CONFIG_LWM2M_GATEWAY_MAX_INSTANCES) ||
 	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
 		return NULL;
 	} else {
@@ -551,7 +551,7 @@ void lcz_lwm2m_gw_obj_set_security_delete_cb(lcz_lwm2m_device_deleted_cb_t secur
 /**************************************************************************************************/
 static bool invalid_index(int idx)
 {
-	if ((idx < 0) || (idx >= CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) ||
+	if ((idx < 0) || (idx >= CONFIG_LWM2M_GATEWAY_MAX_INSTANCES) ||
 	    ((devices[idx].flags & DEV_FLAG_IN_USE) == 0)) {
 		return true;
 	} else {
@@ -580,11 +580,11 @@ static void register_instance(int idx)
 			 STRINGIFY(LWM2M_OBJECT_GATEWAY_ID) "/%u/" STRINGIFY(
 				 LWM2M_GATEWAY_PREFIX_RID),
 			 devices[idx].instance);
-		r = lwm2m_engine_get_res_data(path, (void **)&prefix_str, &prefix_len,
-					      &prefix_flags);
+		r = lwm2m_engine_get_res_buf(path, (void **)&prefix_str, &prefix_len, NULL,
+					     &prefix_flags);
 		if (r == 0) {
 			snprintf(prefix_str, prefix_len,
-				 CONFIG_LCZ_LWM2M_GATEWAY_DEFAULT_DEVICE_PREFIX "%u",
+				 CONFIG_LWM2M_GATEWAY_DEFAULT_DEVICE_PREFIX "%u",
 				 devices[idx].instance);
 		}
 	}
@@ -651,14 +651,14 @@ static int instance_deleted_cb(uint16_t obj_inst_id)
 	int i;
 
 	/* Find the index into our array from the instance ID */
-	for (i = 0; i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
+	for (i = 0; i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
 		if (((devices[i].flags & DEV_FLAG_IN_USE) != 0) &&
 		    (devices[i].instance == obj_inst_id)) {
 			break;
 		}
 	}
 
-	if (i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES) {
+	if (i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES) {
 		/* Add the device to the blocklist forever */
 		add_blocklist(i, 0);
 
@@ -676,7 +676,7 @@ static void manage_lists(uint32_t tag)
 	int i;
 
 	/* Delete any active devices that are past their expiration time */
-	for (i = 0; i < CONFIG_LCZ_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
+	for (i = 0; i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
 		if (((devices[i].flags & DEV_FLAG_IN_USE) != 0) && (devices[i].expires != 0) &&
 		    (now > devices[i].expires)) {
 			delete_instance(i, true);

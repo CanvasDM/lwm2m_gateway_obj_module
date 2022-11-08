@@ -6,7 +6,7 @@
 menuconfig LCZ_LWM2M_GATEWAY_OBJ
 	bool "LCZ LwM2M Gateway Object"
 	depends on LCZ_LWM2M_CLIENT
-	depends on LCZ_LWM2M_GATEWAY_OBJ_SUPPORT
+	depends on LWM2M_GATEWAY_OBJ_SUPPORT
 
 if LCZ_LWM2M_GATEWAY_OBJ
 
