@@ -82,13 +82,6 @@ struct gateway_obj_allow_block_t {
 #define BLE_ADDRESS_TYPE_LEN (2 * sizeof(allow_list[0].addr.type))
 #define BLE_ADDRESS_VAL_LEN (2 * sizeof(allow_list[0].addr.a.val))
 
-/* Telemetry data isn't currently supported using object 25.
- * [Sensor] Object instances are created on the gateway.
- * Allow 4 of each sensor type per BT6.
- * Reserve locations 0 to 3 for gateway or other [sensor] instances.
- */
-#define LEGACY_INSTANCE(x) ((4 * (x)) + CONFIG_LCZ_LWM2M_GATEWAY_OBJ_LEGACY_INST_OFFSET)
-
 /**************************************************************************************************/
 /* Local Data Definitions                                                                         */
 /**************************************************************************************************/
@@ -767,7 +760,7 @@ static int lcz_lwm2m_gateway_obj_init(const struct device *device)
 static int get_instance(const bt_addr_le_t *addr, int idx)
 {
 #if !defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST)
-	return LEGACY_INSTANCE(idx);
+	return LCZ_LWM2M_GW_LEGACY_INSTANCE(idx);
 #else
 	const char *file_name = CONFIG_LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST_FILE;
 	uint32_t i = 0;
@@ -792,6 +785,6 @@ static int get_instance(const bt_addr_le_t *addr, int idx)
 		LOG_DBG("Append static instance list: %d", status);
 	}
 
-	return LEGACY_INSTANCE(i);
+	return LCZ_LWM2M_GW_LEGACY_INSTANCE(i);
 #endif
 }

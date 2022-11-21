@@ -28,6 +28,14 @@ extern "C" {
 typedef void (*lcz_lwm2m_device_deleted_cb_t)(int idx, void *data_ptr);
 typedef void (*lcz_lwm2m_device_foreach_cb_t)(int idx, void *dm_ptr, void *telem_ptr, void *priv);
 
+/* Telemetry data isn't currently supported using object 25.
+ * [Sensor] Object instances are created on the gateway.
+ * Allow 4 of each sensor type per BT6.
+ * Reserve locations 0 to 3 for gateway or other [sensor] instances.
+ */
+#define LCZ_LWM2M_GW_LEGACY_INSTANCE(x)                                                            \
+	((4 * (x)) + CONFIG_LCZ_LWM2M_GATEWAY_OBJ_LEGACY_INST_OFFSET)
+
 /**************************************************************************************************/
 /* Global Function Prototypes                                                                     */
 /**************************************************************************************************/
