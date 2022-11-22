@@ -17,6 +17,7 @@
 #include <zephyr/zephyr.h>
 #include <zephyr/types.h>
 #include <zephyr/bluetooth/addr.h>
+#include <zephyr/shell/shell.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,8 +34,9 @@ typedef void (*lcz_lwm2m_device_foreach_cb_t)(int idx, void *dm_ptr, void *telem
  * Allow 4 of each sensor type per BT6.
  * Reserve locations 0 to 3 for gateway or other [sensor] instances.
  */
+#define LCZ_LWM2M_INSTANCES_PER_BTXXX 4
 #define LCZ_LWM2M_GW_LEGACY_INSTANCE(x)                                                            \
-	((4 * (x)) + CONFIG_LCZ_LWM2M_GATEWAY_OBJ_LEGACY_INST_OFFSET)
+	((LCZ_LWM2M_INSTANCES_PER_BTXXX * (x)) + CONFIG_LCZ_LWM2M_GATEWAY_OBJ_LEGACY_INST_OFFSET)
 
 /**************************************************************************************************/
 /* Global Function Prototypes                                                                     */
@@ -327,6 +329,16 @@ void lcz_lwm2m_gw_obj_set_telem_delete_cb(lcz_lwm2m_device_deleted_cb_t telem_cb
  * @param[in] dm_cb Pointer to the new security device delete callback
  */
 void lcz_lwm2m_gw_obj_set_security_delete_cb(lcz_lwm2m_device_deleted_cb_t security_cb);
+
+
+/**
+ * @brief Load the allow list from the filesystem into RAM.
+ * Devices cannot be added from processed advertisements until this returns.
+ *
+ * @param shell If shell is not NULL, then status will be printed to shell.
+ * @return int number of addresses added on success, negative otherwise
+ */
+int lcz_lwm2m_gw_obj_load_allow_list(const struct shell *shell);
 
 #ifdef __cplusplus
 }

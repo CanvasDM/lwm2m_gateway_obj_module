@@ -23,7 +23,7 @@ LOG_MODULE_REGISTER(lcz_lwm2m_gateway_obj, CONFIG_LCZ_LWM2M_GATEWAY_OBJ_LOG_LEVE
 #include <lwm2m_obj_gateway.h>
 
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
-#include <lcz_param_file.h>
+#include <lcz_kvp.h>
 #endif
 
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_STATIC_INST_LIST)
@@ -82,6 +82,12 @@ struct gateway_obj_allow_block_t {
 #define BLE_ADDRESS_TYPE_LEN (2 * sizeof(allow_list[0].addr.type))
 #define BLE_ADDRESS_VAL_LEN (2 * sizeof(allow_list[0].addr.a.val))
 
+/* Current max line length is 23 characters
+ * Allow room in file for comments.
+ */
+#define MAX_KVP_STR_SIZE 32
+#define MAX_KVP_FILE_SIZE 512
+
 /**************************************************************************************************/
 /* Local Data Definitions                                                                         */
 /**************************************************************************************************/
@@ -92,6 +98,8 @@ static struct gateway_obj_allow_block_t block_list[CONFIG_LCZ_LWM2M_GATEWAY_OBJ_
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
 static struct gateway_obj_allow_block_t allow_list[CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_SIZE];
 static int allow_list_len = 0;
+static K_SEM_DEFINE(allow_list_sem, 1, 1);
+static const lcz_kvp_cfg_t KVP_CFG = { .max_file_out_size = MAX_KVP_FILE_SIZE, .encrypted = false };
 #endif
 
 /* User callbacks */
@@ -112,6 +120,10 @@ static int instance_deleted_cb(uint16_t obj_inst_id);
 static int get_instance(const bt_addr_le_t *addr, int idx);
 
 static void manage_lists(uint32_t tag);
+
+#if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
+static int convert(lcz_kvp_t *kvp, struct gateway_obj_allow_block_t *elem);
+#endif
 
 /**************************************************************************************************/
 /* Global Function Definitions                                                                    */
@@ -193,15 +205,21 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
 	/* Check the allow list */
 	if (retval >= 0) {
-		for (i = 0; i < allow_list_len; i++) {
-			if (bt_addr_le_cmp(addr, &(allow_list[i].addr)) == 0) {
-				instance = allow_list[i].d.instance;
-				break;
+		if (k_sem_take(&allow_list_sem, K_NO_WAIT) == 0) {
+			for (i = 0; i < allow_list_len; i++) {
+				if (bt_addr_le_cmp(addr, &(allow_list[i].addr)) == 0) {
+					instance = allow_list[i].d.instance;
+					break;
+				}
 			}
-		}
-		/* If we did NOT find the device on the list, device is blocked */
-		if ((allow_list_len > 0) && (i >= allow_list_len)) {
-			retval = -EPERM;
+			/* If we did NOT find the device on the list, device is blocked */
+			if ((allow_list_len > 0) && (i >= allow_list_len)) {
+				retval = -EPERM;
+			}
+			k_sem_give(&allow_list_sem);
+		} else {
+			/* Try again - List is being updated */
+			retval = -EAGAIN;
 		}
 	}
 #endif
@@ -539,6 +557,72 @@ void lcz_lwm2m_gw_obj_set_security_delete_cb(lcz_lwm2m_device_deleted_cb_t secur
 	security_delete_cb = security_cb;
 }
 
+#if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
+/*
+ * Example File:
+ * # instance number = Bluetooth address, optional address type
+ * 04=C0:92:98:FC:F8:B7,1
+ * 08=DD:BB:19:5D:7E:FD
+ * 12=C6:30:15:77:69:EE
+ * 16=cb:cf:5b:65:f6:b3
+ */
+int lcz_lwm2m_gw_obj_load_allow_list(const struct shell *shell)
+{
+	const char *fname = CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_FILE;
+	const size_t max_size = CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_SIZE;
+	int i;
+	int r = -EPERM;
+	size_t fsize = 0;
+	char *fstr = NULL;
+	lcz_kvp_t *kv = NULL;
+	size_t pairs = 0;
+
+	do {
+		r = lcz_kvp_parse_from_file(&KVP_CFG, fname, &fsize, &fstr, &kv);
+		if (r < 0) {
+			if (r != -ENOENT) {
+				LOG_ERR("Unable to parse KVP file");
+			}
+			break;
+		}
+		pairs = r;
+
+		if (pairs > max_size) {
+			LOG_WRN("File contains more elements that list size %u > %u", pairs,
+				max_size);
+			pairs = max_size;
+		}
+
+		k_sem_take(&allow_list_sem, K_FOREVER);
+		memset(allow_list, 0, sizeof(allow_list));
+		allow_list_len = 0;
+
+		for (i = 0; i < pairs; i++) {
+			r = convert(&kv[i], &allow_list[i]);
+			if (r < 0) {
+				break;
+			}
+			allow_list_len += 1;
+		}
+		k_sem_give(&allow_list_sem);
+
+	} while (0);
+
+	k_free(kv);
+	k_free(fstr);
+
+	if (shell) {
+		shell_print(shell, "load %s: size: %u status: %d pairs: %u allow_list_len: %d",
+			    fname, fsize, r, pairs, allow_list_len);
+	} else {
+		LOG_DBG("load %s: size: %u status: %d pairs: %u allow_list_len: %d", fname, fsize,
+			r, pairs, allow_list_len);
+	}
+
+	return (r < 0) ? r : allow_list_len;
+}
+#endif
+
 /**************************************************************************************************/
 /* Local Function Definitions                                                                     */
 /**************************************************************************************************/
@@ -683,16 +767,8 @@ SYS_INIT(lcz_lwm2m_gateway_obj_init, APPLICATION, CONFIG_LCZ_LWM2M_GATEWAY_OBJ_I
 /**************************************************************************************************/
 static int lcz_lwm2m_gateway_obj_init(const struct device *device)
 {
-#if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
-	int n_allow;
-	size_t fsize;
-	char *fstr = NULL;
-	param_kvp_t *kv = NULL;
-#endif /* LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST */
-	int i;
-	int ret;
-
 	ARG_UNUSED(device);
+	int i;
 
 	/* Register object 25 delete callback */
 	lwm2m_engine_register_delete_callback(LWM2M_OBJECT_GATEWAY_ID, instance_deleted_cb);
@@ -707,52 +783,100 @@ static int lcz_lwm2m_gateway_obj_init(const struct device *device)
 	}
 
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
-	/* Reset the allow list in memory */
-	memset(allow_list, 0, sizeof(allow_list));
-	allow_list_len = 0;
-
-	/* Parse the allow list */
-	n_allow = lcz_param_file_parse_from_file(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_FILE,
-						 &fsize, &fstr, &kv);
-
-	/*
-	 * Entries in the parameter file will look like:
-	 *     0001=TTAABBCCDDEEFF
-	 *
-	 * where 0001 will be the instance number that we use, TT is the Bluetooth address type
-	 * byte and AABBCCDDEEFF is the Bluetooth address of the device.
-	 */
-	for (i = 0; i < n_allow && allow_list_len < CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_SIZE;
-	     i++) {
-		/* Length needs to include Bluetooth address type plus value */
-		if (kv[i].length == (BLE_ADDRESS_TYPE_LEN + BLE_ADDRESS_VAL_LEN)) {
-			ret = hex2bin(kv[i].keystr, BLE_ADDRESS_TYPE_LEN,
-				      &(allow_list[allow_list_len].addr.type),
-				      sizeof(allow_list[0].addr.type));
-			if (ret == sizeof(allow_list[0].addr.type)) {
-				ret = hex2bin(kv[i].keystr + BLE_ADDRESS_TYPE_LEN,
-					      BLE_ADDRESS_VAL_LEN,
-					      allow_list[allow_list_len].addr.a.val,
-					      sizeof(allow_list[0].addr.a.val));
-				if (ret == sizeof(allow_list[0].addr.a.val)) {
-					allow_list[allow_list_len].d.instance = kv[i].id;
-					allow_list_len++;
-				}
-			}
-		}
-	}
-
-	if (fstr != NULL) {
-		k_free(fstr);
-	}
-
-	if (kv != NULL) {
-		k_free(kv);
-	}
-#endif /* LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST */
+	lcz_lwm2m_gw_obj_load_allow_list(NULL);
+#endif
 
 	return 0;
 }
+
+#if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
+static bool valid_instance(uint16_t instance)
+{
+	/* reserved locations are for gateway */
+	if (instance < CONFIG_LCZ_LWM2M_GATEWAY_OBJ_LEGACY_INST_OFFSET) {
+		return false;
+	}
+
+	/* Allow multiple sensor instances per BTxxx (when gateway is creating sensor objects). */
+	if ((instance % LCZ_LWM2M_INSTANCES_PER_BTXXX) != 0) {
+		return false;
+	}
+
+	return true;
+}
+
+/* Convert the key-value pair strings into binary (allow list format) */
+static int convert(lcz_kvp_t *kvp, struct gateway_obj_allow_block_t *elem)
+{
+	char str[MAX_KVP_STR_SIZE];
+	int count;
+	unsigned int temp_addr[BT_ADDR_SIZE];
+	unsigned int temp_type;
+	uint16_t instance;
+	unsigned int i;
+	char *comma;
+
+	if (kvp->key_len > MAX_KVP_STR_SIZE) {
+		LOG_WRN("%s: Key name too long", __func__);
+		return -EINVAL;
+	}
+
+	if (kvp->val_len > MAX_KVP_STR_SIZE) {
+		LOG_WRN("%s: Value too long", __func__);
+		return -EINVAL;
+	}
+
+	if (kvp->key == NULL) {
+		LOG_ERR("%s: Invalid key pointer", __func__);
+		return -EINVAL;
+	}
+	if (kvp->val == NULL) {
+		LOG_ERR("%s: Invalid value pointer", __func__);
+		return -EINVAL;
+	}
+
+	/* terminate key then convert */
+	memcpy(str, kvp->key, kvp->key_len);
+	str[kvp->key_len] = 0;
+	instance = (uint16_t)strtoul(str, NULL, 10);
+	if (!valid_instance(instance)) {
+		LOG_ERR("Invalid instance %u str: %s", instance, str);
+		return -EINVAL;
+	}
+
+	memcpy(str, kvp->val, kvp->val_len);
+	str[kvp->val_len] = 0;
+	/* Default for optional parameter */
+	temp_type = BT_ADDR_LE_RANDOM;
+	/* Temporary ints are used because hhx requires LIBC NANO to be disabled. */
+	count = sscanf(str, "%x:%x:%x:%x:%x:%x,%u", &temp_addr[5], &temp_addr[4], &temp_addr[3],
+		       &temp_addr[2], &temp_addr[1], &temp_addr[0], &temp_type);
+	if (count < BT_ADDR_SIZE) {
+		LOG_ERR("%s: Unable to parse address: %u < %u str: %s", __func__, count,
+			BT_ADDR_SIZE, str);
+		return -EINVAL;
+	} else {
+		/* Don't print address type */
+		comma = strchr(str, ',');
+		if (comma) {
+			*comma = 0;
+		}
+		LOG_INF("Adding %s to allow list (instance: %u)", str, instance);
+		elem->d.instance = instance;
+		for (i = 0; i < BT_ADDR_SIZE; i++) {
+			if (temp_addr[i] > UINT8_MAX) {
+				return -EINVAL;
+			}
+			elem->addr.a.val[i] = (uint8_t)temp_addr[i];
+		}
+		if (temp_type > UINT8_MAX) {
+			return -EINVAL;
+		}
+		elem->addr.type = (uint8_t)temp_type;
+		return 0;
+	}
+}
+#endif
 
 /* Create instance value based on array index or
  * create instance value based on Bluetooth address.
@@ -772,7 +896,7 @@ static int get_instance(const bt_addr_le_t *addr, int idx)
 	do {
 		status = fsu_read_abs_block(file_name, offset, &inst_addr, size);
 		if (bt_addr_le_cmp(addr, &inst_addr) == 0) {
-			LOG_WRN("Matched Bluetooth Address index: %u", i);
+			LOG_INF("Matched Bluetooth Address index: %u", i);
 			break;
 		}
 		i += 1;

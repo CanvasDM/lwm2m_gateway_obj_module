@@ -32,7 +32,7 @@ config LCZ_LWM2M_GATEWAY_OBJ_BLOCK_LIST_SIZE
 
 config LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST
 	bool "Gateway allow list"
-	depends on LCZ_PARAM_FILE
+	depends on LCZ_KVP
 	help
 	  Adds support for reading an allow list from a file in the filesystem that
 	  specifies the addresses of the end nodes that are allowed to be reported
