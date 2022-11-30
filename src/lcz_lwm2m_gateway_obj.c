@@ -97,7 +97,7 @@ static struct gateway_obj_device_t devices[CONFIG_LWM2M_GATEWAY_MAX_INSTANCES];
 static struct gateway_obj_allow_block_t block_list[CONFIG_LCZ_LWM2M_GATEWAY_OBJ_BLOCK_LIST_SIZE];
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
 static struct gateway_obj_allow_block_t allow_list[CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_SIZE];
-static int allow_list_len = 0;
+static int allow_list_len = -1;
 static K_SEM_DEFINE(allow_list_sem, 1, 1);
 static const lcz_kvp_cfg_t KVP_CFG = { .max_file_out_size = MAX_KVP_FILE_SIZE, .encrypted = false };
 #endif
@@ -213,7 +213,7 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 				}
 			}
 			/* If we did NOT find the device on the list, device is blocked */
-			if ((allow_list_len > 0) && (i >= allow_list_len)) {
+			if ((allow_list_len >= 0) && (i >= allow_list_len)) {
 				retval = -EPERM;
 			}
 			k_sem_give(&allow_list_sem);
@@ -588,7 +588,7 @@ int lcz_lwm2m_gw_obj_load_allow_list(const struct shell *shell)
 		pairs = r;
 
 		if (pairs > max_size) {
-			LOG_WRN("File contains more elements that list size %u > %u", pairs,
+			LOG_WRN("File contains more elements than list size %u > %u", pairs,
 				max_size);
 			pairs = max_size;
 		}
