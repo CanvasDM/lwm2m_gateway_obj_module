@@ -158,7 +158,7 @@ void lcz_lwm2m_gw_obj_tick(int idx);
  * @param[in] name New endpoint name
  * @param[in] name_len Length of endpoint name string
  *
- * @returns <0 or error or 0 if name was updated.
+ * @returns <0 on error or 0 if name was updated.
  */
 int lcz_lwm2m_gw_obj_set_endpoint_name(int idx, char *name, int name_len);
 
@@ -169,7 +169,7 @@ int lcz_lwm2m_gw_obj_set_endpoint_name(int idx, char *name, int name_len);
  * @param[in] name Buffer to write endpoint name into
  * @param[in] name_len Length of endpoint name string
  *
- * @returns <0 or error or 0 if name was copied.
+ * @returns <0 on error or 0 if name was copied.
  */
 int lcz_lwm2m_gw_obj_get_endpoint_name(int idx, char *name, int name_len);
 
@@ -184,9 +184,18 @@ int lcz_lwm2m_gw_obj_get_endpoint_name(int idx, char *name, int name_len);
  * @param[in] obj_list New object list
  * @param[in] obj_list_len Length of object list string
  *
- * @returns <0 or error or 0 if object list was updated.
+ * @returns <0 on error or 0 if object list was updated.
  */
 int lcz_lwm2m_gw_obj_set_object_list(int idx, char *obj_list, int obj_list_len);
+
+/**
+ * @brief Get length of a device's object list
+ *
+ * @param[in] idx Gateway object database index for the device
+ *
+ * @returns <0 on error or length of string
+ */
+int lcz_lwm2m_gw_obj_get_object_list_length(int idx);
 
 /**
  * @brief Set/update a device's lifetime value
@@ -200,7 +209,7 @@ int lcz_lwm2m_gw_obj_set_object_list(int idx, char *obj_list, int obj_list_len);
  * @param[in] lifetime Device lifetime in seconds (0 if the device should
  * never be removed).
  *
- * @returns <0 or error or 0 if object list was updated.
+ * @returns <0 on error or 0 if object list was updated.
  */
 int lcz_lwm2m_gw_obj_set_lifetime(int idx, uint16_t lifetime);
 

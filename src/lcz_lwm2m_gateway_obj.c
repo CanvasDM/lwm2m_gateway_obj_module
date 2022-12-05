@@ -441,9 +441,36 @@ int lcz_lwm2m_gw_obj_set_object_list(int idx, char *obj_list, int obj_list_len)
 			objlist[obj_list_len] = '\0';
 
 			/* Set it in the object */
-			lwm2m_engine_set_string(path, objlist);
+			retval = lwm2m_engine_set_string(path, objlist);
 		} else {
 			retval = -ENOMEM;
+		}
+	}
+
+	return retval;
+}
+
+int lcz_lwm2m_gw_obj_get_object_list_length(int idx)
+{
+	char path[LWM2M_MAX_PATH_STR_LEN];
+	char list[CONFIG_LWM2M_GATEWAY_IOT_DEVICE_OBJECTS_MAX_STR_SIZE];
+	int retval = 0;
+
+	if (invalid_index(idx)) {
+		retval = -ENOENT;
+	} else {
+		if ((devices[idx].flags & DEV_FLAG_INST_CREATED) == 0) {
+			retval = -ENOENT;
+		} else {
+			snprintf(path, sizeof(path),
+				 STRINGIFY(LWM2M_OBJECT_GATEWAY_ID) "/%u/" STRINGIFY(
+					 LWM2M_GATEWAY_IOT_DEVICE_OBJECTS_RID),
+				 devices[idx].instance);
+
+			retval = lwm2m_engine_get_string(path, list, sizeof(list));
+			if (retval == 0) {
+				retval = strlen(list);
+			}
 		}
 	}
 
