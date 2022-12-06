@@ -349,6 +349,30 @@ void lcz_lwm2m_gw_obj_set_security_delete_cb(lcz_lwm2m_device_deleted_cb_t secur
  */
 int lcz_lwm2m_gw_obj_load_allow_list(const struct shell *shell);
 
+/**
+ * @brief Show device list
+ *
+ * @param shell If shell is not NULL, then blocklist will be printed to shell.
+ * @return int <0 on error or 0 on success
+ */
+int lcz_lwm2m_gw_obj_show_device_list(const struct shell *shell);
+
+/**
+ * @brief Show block list
+ *
+ * @param shell If shell is not NULL, then blocklist will be printed to shell.
+ * @return int <0 on error or 0 on success
+ */
+int lcz_lwm2m_gw_obj_show_blocklist(const struct shell *shell);
+
+/**
+ * @brief Remove a device from the temporary block list
+ * (set its expiration time to -1)
+ *
+ * @return int <0 on error or 0 on success
+ */
+int lcz_lwm2m_gw_obj_blocklist_remove(int idx);
+
 #ifdef __cplusplus
 }
 #endif

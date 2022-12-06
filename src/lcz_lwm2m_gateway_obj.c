@@ -650,6 +650,72 @@ int lcz_lwm2m_gw_obj_load_allow_list(const struct shell *shell)
 }
 #endif
 
+int lcz_lwm2m_gw_obj_show_device_list(const struct shell *shell)
+{
+	char addr_str[BT_ADDR_LE_STR_LEN];
+	int i;
+	char c;
+	char u;
+
+	if (!shell) {
+		return -EINVAL;
+	}
+
+	shell_print(shell, "now %lld", k_uptime_get());
+	shell_print(shell, "inst=addr in_use instance_created expires lifetime");
+
+	for (i = 0; i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
+		bt_addr_le_to_str(&(devices[i].addr), addr_str, sizeof(addr_str));
+		u = ((devices[i].flags & DEV_FLAG_IN_USE) != 0) ? 'y' : 'n';
+		c = ((devices[i].flags & DEV_FLAG_INST_CREATED) != 0) ? 'y' : 'n';
+		shell_print(shell, "%02x=%s %c %c %lld %u", devices[i].instance, addr_str, u, c,
+			    devices[i].expires, devices[i].lifetime);
+	}
+
+	return 0;
+}
+
+int lcz_lwm2m_gw_obj_show_blocklist(const struct shell *shell)
+{
+	int64_t now = k_uptime_get();
+	int64_t expires;
+	int64_t seconds;
+	char addr_str[BT_ADDR_LE_STR_LEN];
+	int i;
+
+	if (!shell) {
+		return -EINVAL;
+	}
+
+	shell_print(shell, "now %lld", now);
+
+	for (i = 0; i < CONFIG_LCZ_LWM2M_GATEWAY_OBJ_BLOCK_LIST_SIZE; i++) {
+		expires = block_list[i].d.expires;
+		if (expires == 0) {
+			seconds = -1;
+		} else if (expires > now) {
+			seconds = (expires - now) / MSEC_PER_SEC;
+		} else {
+			seconds = 0;
+		}
+		bt_addr_le_to_str(&(block_list[i].addr), addr_str, sizeof(addr_str));
+		shell_print(shell, "%s expiration: %lld (%lld seconds)", addr_str, expires,
+				seconds);
+	}
+
+	return 0;
+}
+
+int lcz_lwm2m_gw_obj_blocklist_remove(int idx)
+{
+	if (idx >= 0 && idx < CONFIG_LCZ_LWM2M_GATEWAY_OBJ_BLOCK_LIST_SIZE) {
+		block_list[idx].d.expires = -1;
+		return 0;
+	} else {
+		return -ENOENT;
+	}
+}
+
 /**************************************************************************************************/
 /* Local Function Definitions                                                                     */
 /**************************************************************************************************/
