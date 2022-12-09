@@ -98,7 +98,6 @@ static struct gateway_obj_allow_block_t block_list[CONFIG_LCZ_LWM2M_GATEWAY_OBJ_
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
 static struct gateway_obj_allow_block_t allow_list[CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST_SIZE];
 static int allow_list_len = -1;
-static K_SEM_DEFINE(allow_list_sem, 1, 1);
 static const lcz_kvp_cfg_t KVP_CFG = { .max_file_out_size = MAX_KVP_FILE_SIZE, .encrypted = false };
 #endif
 
@@ -120,6 +119,7 @@ static int instance_deleted_cb(uint16_t obj_inst_id);
 static int get_instance(const bt_addr_le_t *addr, int idx);
 
 static void manage_lists(uint32_t tag);
+static void delete_active_not_in_allow_list(const struct shell *shell);
 
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
 static int convert(lcz_kvp_t *kvp, struct gateway_obj_allow_block_t *elem);
@@ -190,6 +190,12 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 	int retval = 0;
 	int i;
 
+	if (k_is_in_isr()) {
+		return -EPERM;
+	}
+
+	k_sched_lock();
+
 	/* Check the block list */
 	for (i = 0; i < CONFIG_LCZ_LWM2M_GATEWAY_OBJ_BLOCK_LIST_SIZE; i++) {
 		if ((block_list[i].d.expires == 0 || block_list[i].d.expires >= now) &&
@@ -205,21 +211,15 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 #if defined(CONFIG_LCZ_LWM2M_GATEWAY_OBJ_ALLOW_LIST)
 	/* Check the allow list */
 	if (retval >= 0) {
-		if (k_sem_take(&allow_list_sem, K_NO_WAIT) == 0) {
-			for (i = 0; i < allow_list_len; i++) {
-				if (bt_addr_le_cmp(addr, &(allow_list[i].addr)) == 0) {
-					instance = allow_list[i].d.instance;
-					break;
-				}
+		for (i = 0; i < allow_list_len; i++) {
+			if (bt_addr_le_cmp(addr, &(allow_list[i].addr)) == 0) {
+				instance = allow_list[i].d.instance;
+				break;
 			}
-			/* If we did NOT find the device on the list, device is blocked */
-			if ((allow_list_len >= 0) && (i >= allow_list_len)) {
-				retval = -EPERM;
-			}
-			k_sem_give(&allow_list_sem);
-		} else {
-			/* Try again - List is being updated */
-			retval = -EAGAIN;
+		}
+		/* If we did NOT find the device on the list, device is blocked */
+		if ((allow_list_len >= 0) && (i >= allow_list_len)) {
+			retval = -EPERM;
 		}
 	}
 #endif
@@ -256,6 +256,8 @@ int lcz_lwm2m_gw_obj_create(const bt_addr_le_t *addr)
 			devices[i].security_data_ptr = NULL;
 		}
 	}
+
+	k_sched_unlock();
 
 	return retval;
 }
@@ -604,6 +606,10 @@ int lcz_lwm2m_gw_obj_load_allow_list(const struct shell *shell)
 	lcz_kvp_t *kv = NULL;
 	size_t pairs = 0;
 
+	if (k_is_in_isr()) {
+		return -EPERM;
+	}
+
 	do {
 		r = lcz_kvp_parse_from_file(&KVP_CFG, fname, &fsize, &fstr, &kv);
 		if (r < 0) {
@@ -620,7 +626,7 @@ int lcz_lwm2m_gw_obj_load_allow_list(const struct shell *shell)
 			pairs = max_size;
 		}
 
-		k_sem_take(&allow_list_sem, K_FOREVER);
+		k_sched_lock();
 		memset(allow_list, 0, sizeof(allow_list));
 		allow_list_len = 0;
 
@@ -631,7 +637,7 @@ int lcz_lwm2m_gw_obj_load_allow_list(const struct shell *shell)
 			}
 			allow_list_len += 1;
 		}
-		k_sem_give(&allow_list_sem);
+		k_sched_unlock();
 
 	} while (0);
 
@@ -644,6 +650,10 @@ int lcz_lwm2m_gw_obj_load_allow_list(const struct shell *shell)
 	} else {
 		LOG_DBG("load %s: size: %u status: %d pairs: %u allow_list_len: %d", fname, fsize,
 			r, pairs, allow_list_len);
+	}
+
+	if (r >= 0) {
+		delete_active_not_in_allow_list(shell);
 	}
 
 	return (r < 0) ? r : allow_list_len;
@@ -668,7 +678,7 @@ int lcz_lwm2m_gw_obj_show_device_list(const struct shell *shell)
 		bt_addr_le_to_str(&(devices[i].addr), addr_str, sizeof(addr_str));
 		u = ((devices[i].flags & DEV_FLAG_IN_USE) != 0) ? 'y' : 'n';
 		c = ((devices[i].flags & DEV_FLAG_INST_CREATED) != 0) ? 'y' : 'n';
-		shell_print(shell, "%02x=%s %c %c %lld %u", devices[i].instance, addr_str, u, c,
+		shell_print(shell, "%02u=%s %c %c %lld %u", devices[i].instance, addr_str, u, c,
 			    devices[i].expires, devices[i].lifetime);
 	}
 
@@ -709,7 +719,9 @@ int lcz_lwm2m_gw_obj_show_blocklist(const struct shell *shell)
 int lcz_lwm2m_gw_obj_blocklist_remove(int idx)
 {
 	if (idx >= 0 && idx < CONFIG_LCZ_LWM2M_GATEWAY_OBJ_BLOCK_LIST_SIZE) {
+		k_sched_lock();
 		block_list[idx].d.expires = -1;
+		k_sched_unlock();
 		return 0;
 	} else {
 		return -ENOENT;
@@ -852,6 +864,40 @@ static void manage_lists(uint32_t tag)
 			delete_instance(i, true);
 		}
 	}
+}
+
+static void delete_active_not_in_allow_list(const struct shell *shell)
+{
+	int i;
+	int j;
+	bool delete;
+	char addr_str[BT_ADDR_LE_STR_LEN];
+
+	k_sched_lock();
+
+	for (i = 0; i < CONFIG_LWM2M_GATEWAY_MAX_INSTANCES; i++) {
+		if ((devices[i].flags & DEV_FLAG_IN_USE) != 0) {
+			delete = true;
+			bt_addr_le_to_str(&devices[i].addr, addr_str, sizeof(addr_str));
+			for (j = 0; j < allow_list_len; j++) {
+				if (bt_addr_le_cmp(&devices[i].addr, &allow_list[j].addr) == 0) {
+					delete = false;
+					break;
+				}
+			}
+			if (delete) {
+				delete_instance(i, true);
+			}
+
+			if (shell) {
+				shell_print(shell, "%s %s active list", addr_str, delete ? "deleted from" : "kept in");
+			} else {
+				LOG_INF("%s %s active list", addr_str, delete ? "deleted from" : "kept in");
+			}
+		}
+	}
+
+	k_sched_unlock();
 }
 
 SYS_INIT(lcz_lwm2m_gateway_obj_init, APPLICATION, CONFIG_LCZ_LWM2M_GATEWAY_OBJ_INIT_PRIORITY);
